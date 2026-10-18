@@ -1,0 +1,126 @@
+import 'package:flutter/widgets.dart';
+
+const translations = <String, List<String>>{
+  'chats': ['Chats', 'Trò chuyện', '聊天'],
+  'contacts': ['Contacts', 'Danh bạ', '通讯录'],
+  'discover': ['Discover', 'Khám phá', '发现'],
+  'me': ['Me', 'Tôi', '我'],
+  'login': ['Log in', 'Đăng nhập', '登录'],
+  'register': ['Create account', 'Tạo tài khoản', '注册'],
+  'identifier': ['QChat ID or email', 'QChat ID hoặc email', 'QChat ID 或邮箱'],
+  'password': [
+    'Password (12+ characters)',
+    'Mật khẩu (ít nhất 12 ký tự)',
+    '密码（至少12位）',
+  ],
+  'nickname': ['Display name', 'Tên hiển thị', '昵称'],
+  'email': ['Email', 'Email', '邮箱'],
+  'search': ['Search', 'Tìm kiếm', '搜索'],
+  'newFriends': ['New friends', 'Bạn mới', '新的朋友'],
+  'groups': ['Group chats', 'Nhóm trò chuyện', '群聊'],
+  'moments': ['Moments', 'Khoảnh khắc', '朋友圈'],
+  'scan': ['Scan QR code', 'Quét mã QR', '扫一扫'],
+  'settings': ['Settings', 'Cài đặt', '设置'],
+  'favorites': ['Favorites', 'Yêu thích', '收藏'],
+  'security': ['Account & security', 'Tài khoản & bảo mật', '账号与安全'],
+  'privacy': ['Privacy', 'Quyền riêng tư', '隐私'],
+  'language': ['Language', 'Ngôn ngữ', '语言'],
+  'appearance': ['Dark appearance', 'Giao diện tối', '深色模式'],
+  'emptyChats': [
+    'Your conversations start here',
+    'Bắt đầu cuộc trò chuyện của bạn',
+    '从这里开始聊天',
+  ],
+  'emptyContacts': [
+    'Find a friend by QChat ID',
+    'Tìm bạn bằng QChat ID',
+    '通过 QChat ID 查找好友',
+  ],
+  'emptyMoments': [
+    'Share a moment with your friends',
+    'Chia sẻ khoảnh khắc cùng bạn bè',
+    '和朋友分享生活',
+  ],
+  'send': ['Send', 'Gửi', '发送'],
+  'message': ['Message', 'Tin nhắn', '消息'],
+  'back': ['Back', 'Quay lại', '返回'],
+  'retry': ['Retry', 'Thử lại', '重试'],
+  'logout': ['Log out', 'Đăng xuất', '退出登录'],
+  'save': ['Save', 'Lưu', '保存'],
+  'cancel': ['Cancel', 'Hủy', '取消'],
+  'accept': ['Accept', 'Chấp nhận', '接受'],
+  'reject': ['Decline', 'Từ chối', '拒绝'],
+  'add': ['Add friend', 'Thêm bạn', '添加朋友'],
+  'newGroup': ['Create group', 'Tạo nhóm', '创建群聊'],
+  'groupName': ['Group name', 'Tên nhóm', '群名称'],
+  'chooseFriends': ['Select friends', 'Chọn bạn bè', '选择朋友'],
+  'networkError': [
+    'Connection failed. Please try again.',
+    'Không kết nối được. Vui lòng thử lại.',
+    '连接失败，请重试。',
+  ],
+  'loading': ['Loading…', 'Đang tải…', '加载中…'],
+  'pending': [
+    'Pending · tap to retry',
+    'Đang chờ · chạm để thử lại',
+    '待发送 · 点击重试',
+  ],
+  'post': ['Post', 'Đăng', '发表'],
+  'writeMoment': [
+    'What would you like to share?',
+    'Bạn muốn chia sẻ điều gì?',
+    '分享此刻的想法',
+  ],
+  'copy': ['Copy', 'Sao chép', '复制'],
+  'recall': ['Recall', 'Thu hồi', '撤回'],
+  'delete': ['Delete for me', 'Xóa phía tôi', '删除'],
+  'reply': ['Reply', 'Trả lời', '回复'],
+  'recalled': ['Message recalled', 'Tin nhắn đã thu hồi', '消息已撤回'],
+  'image': ['Image', 'Hình ảnh', '图片'],
+  'video': ['Video', 'Video', '视频'],
+  'file': ['File', 'Tệp', '文件'],
+  'audio': ['Voice message', 'Tin nhắn thoại', '语音消息'],
+  'profile': ['Edit profile', 'Sửa hồ sơ', '编辑资料'],
+  'bio': ['About me', 'Giới thiệu', '个性签名'],
+  'sessions': ['Signed-in devices', 'Thiết bị đăng nhập', '登录设备'],
+  'noItems': ['Nothing here yet', 'Chưa có nội dung', '暂无内容'],
+  'qr': ['My QR code', 'Mã QR của tôi', '我的二维码'],
+  'connected': ['Connected', 'Đã kết nối', '已连接'],
+  'offline': [
+    'Offline · messages will retry',
+    'Ngoại tuyến · tin nhắn sẽ gửi lại',
+    '离线 · 消息将自动重试',
+  ],
+  'about': ['About QChat', 'Về QChat', '关于 QChat'],
+  'call': ['Voice call', 'Gọi thoại', '语音通话'],
+  'videoCall': ['Video call', 'Gọi video', '视频通话'],
+  'endCall': ['End call', 'Kết thúc', '挂断'],
+  'answer': ['Answer', 'Trả lời', '接听'],
+  'mute': ['Mute', 'Tắt mic', '静音'],
+  'camera': ['Camera', 'Camera', '摄像头'],
+  'calling': ['Calling…', 'Đang gọi…', '呼叫中…'],
+  'welcome': [
+    'A little closer, every day.',
+    'Gần nhau hơn, mỗi ngày.',
+    '每一天，更近一点。',
+  ],
+  'welcomeNote': [
+    'Private conversations. Shared moments.',
+    'Trò chuyện riêng tư. Chia sẻ khoảnh khắc.',
+    '私密聊天，分享生活。',
+  ],
+  'terms': [
+    'By continuing, you agree to the QChat privacy policy.',
+    'Tiếp tục đồng nghĩa bạn đồng ý chính sách riêng tư QChat.',
+    '继续即表示您同意 QChat 隐私政策。',
+  ],
+};
+String tr(BuildContext context, String key) {
+  final language = Localizations.localeOf(context).languageCode;
+  return translations[key]?[language == 'vi'
+          ? 1
+          : language == 'zh'
+          ? 2
+          : 0] ??
+      key;
+}
