@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:tdesign_flutter/tdesign_flutter.dart';
@@ -19,6 +20,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final name = TextEditingController(), bio = TextEditingController();
   late Future<dynamic> profile;
+  StreamSubscription<void>? updates;
   bool initialized = false;
   String? error;
   Future<void> edit(String field, String label, String initial) async {
@@ -96,10 +98,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void initState() {
     super.initState();
     profile = ref.read(clientProvider).get('/users/me');
+    updates = ref.read(clientProvider).changes.stream.listen((_) {
+      if (mounted) {
+        setState(() => profile = ref.read(clientProvider).get('/users/me'));
+      }
+    });
   }
 
   @override
   void dispose() {
+    updates?.cancel();
     name.dispose();
     bio.dispose();
     super.dispose();

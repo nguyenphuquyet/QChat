@@ -25,7 +25,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     load();
     updates = ref.read(clientProvider).changes.stream.listen((_) {
-      if (mounted && index == 0) setState(load);
+      if (mounted) setState(load);
     });
   }
 
@@ -94,12 +94,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             key: ValueKey(index),
             future: data,
             builder: (c, s) {
-              if (s.hasError) {
+              if (s.hasError && !ref.read(clientProvider).offline.value) {
                 return QChatError(error: s.error!, retry: () => setState(load));
               }
-              if (!s.hasData) return const QChatLoading();
-              if (index == 3) return me(c, s.data as Map);
-              final items = (s.data as List)
+              if (index == 3) {
+                return me(c, s.data as Map? ?? {'nickname': '', 'qchatId': ''});
+              }
+              final items = (s.data as List? ?? [])
                   .where(
                     (item) =>
                         (index == 0

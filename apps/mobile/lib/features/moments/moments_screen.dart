@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tdesign_flutter/tdesign_flutter.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,7 @@ class MomentsScreen extends ConsumerStatefulWidget {
 
 class _MomentsScreenState extends ConsumerState<MomentsScreen> {
   late Future<dynamic> feed;
+  StreamSubscription<void>? updates;
   final text = TextEditingController();
   bool composing = false, busy = false;
   String? error;
@@ -20,6 +22,9 @@ class _MomentsScreenState extends ConsumerState<MomentsScreen> {
   void initState() {
     super.initState();
     load();
+    updates = ref.read(clientProvider).changes.stream.listen((_) {
+      if (mounted) setState(load);
+    });
   }
 
   void load() {
@@ -28,6 +33,7 @@ class _MomentsScreenState extends ConsumerState<MomentsScreen> {
 
   @override
   void dispose() {
+    updates?.cancel();
     text.dispose();
     super.dispose();
   }
@@ -92,11 +98,10 @@ class _MomentsScreenState extends ConsumerState<MomentsScreen> {
           child: FutureBuilder<dynamic>(
             future: feed,
             builder: (c, s) {
-              if (s.hasError) {
+              if (s.hasError && !ref.read(clientProvider).offline.value) {
                 return QChatError(error: s.error!, retry: () => setState(load));
               }
-              if (!s.hasData) return const QChatLoading();
-              final posts = s.data as List;
+              final posts = s.data as List? ?? [];
               return ListView(
                 children: [
                   Container(

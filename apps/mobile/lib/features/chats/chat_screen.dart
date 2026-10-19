@@ -98,6 +98,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         scroll.position.maxScrollExtent - scroll.offset < 100;
     try {
       final client = ref.read(clientProvider);
+      final cached = await client.local?.read('messages:${widget.id}');
+      if (cached is List && mounted) {
+        setState(() {
+          messages = client.visibleMessages(
+            widget.id,
+            cached.map((m) => Map<String, dynamic>.from(m)).toList(),
+          );
+          loading = false;
+        });
+      }
       final rows = await client.messages(widget.id);
       final c = await client.get('/conversations/${widget.id}');
       final others = (c['members'] as List).where(

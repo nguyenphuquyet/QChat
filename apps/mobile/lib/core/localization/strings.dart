@@ -1,6 +1,11 @@
 import 'package:flutter/widgets.dart';
 
 const translations = <String, List<String>>{
+  'offlineCache': [
+    'Connection lost. Showing saved content.',
+    'Lỗi kết nối. Đang hiển thị nội dung đã lưu.',
+    '连接中断，正在显示已保存的内容。',
+  ],
   'previewPush': ['Message previews', 'Xem trước nội dung tin nhắn', '消息预览'],
   'allowRequests': [
     'Allow friend requests',

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -7,11 +9,11 @@ import '../storage/database.dart';
 
 const apiUrl = String.fromEnvironment(
   'API_URL',
-  defaultValue: 'http://localhost:3000/api',
+  defaultValue: 'https://chat.nguyenphuquyet.online/api',
 );
 const realtimeUrl = String.fromEnvironment(
   'REALTIME_URL',
-  defaultValue: 'http://localhost:3001',
+  defaultValue: 'https://chat.nguyenphuquyet.online',
 );
 
 class QChatClient {
@@ -35,6 +37,47 @@ class QChatClient {
   Future<void>? refreshing;
   bool flushing = false;
   bool stopping = false;
+  final offline = ValueNotifier<bool>(false);
+  final Map<String, Future<dynamic>> _requests = {};
+  final Map<String, DateTime> _checked = {};
+  Timer? _recovery;
+  bool _reconnecting = false;
+
+  static bool connectionFailure(Object error) =>
+      error is DioException &&
+      (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          (error.response?.statusCode ?? 0) >= 500);
+
+  void _connectionLost() {
+    offline.value = true;
+    if (userId != null && !stopping) {
+      _recovery ??= Timer.periodic(const Duration(seconds: 15), (_) {
+        unawaited(reconnect());
+      });
+    }
+  }
+
+  Future<void> reconnect() async {
+    if (_reconnecting || userId == null || stopping) return;
+    _reconnecting = true;
+    try {
+      await refresh();
+      offline.value = false;
+      _recovery?.cancel();
+      _recovery = null;
+      _checked.clear();
+      connect();
+      changes.add(null);
+    } catch (e) {
+      if (connectionFailure(e)) _connectionLost();
+    } finally {
+      _reconnecting = false;
+    }
+  }
+
   QChatClient() {
     dio.interceptors.add(
       InterceptorsWrapper(
@@ -42,7 +85,13 @@ class QChatClient {
           if (token != null) o.headers['Authorization'] = 'Bearer $token';
           h.next(o);
         },
+        onResponse: (r, h) {
+          offline.value = false;
+          if (r.requestOptions.method != 'GET') _checked.clear();
+          h.next(r);
+        },
         onError: (e, h) async {
+          if (connectionFailure(e)) _connectionLost();
           if (e.response?.statusCode == 401 &&
               e.requestOptions.extra['retry'] != true &&
               !e.requestOptions.path.startsWith('/auth/')) {
@@ -52,7 +101,14 @@ class QChatClient {
               e.requestOptions.headers['Authorization'] = 'Bearer $token';
               h.resolve(await dio.fetch(e.requestOptions));
               return;
-            } catch (_) {}
+            } catch (refreshError) {
+              if (refreshError is DioException &&
+                  connectionFailure(refreshError)) {
+                _connectionLost();
+                h.reject(refreshError);
+                return;
+              }
+            }
           }
           h.next(e);
         },
@@ -63,12 +119,8 @@ class QChatClient {
     userId = await storage.read(key: 'userId');
     if (userId == null) return false;
     local = LocalDatabase(userId!);
-    try {
-      await refresh();
-      connect();
-    } catch (_) {
-      /* Keep account-scoped cache available offline. */
-    }
+    // Open the saved account immediately; network recovery must not block UI.
+    unawaited(reconnect());
     return true;
   }
 
@@ -102,10 +154,12 @@ class QChatClient {
   Future<void> _refresh() async {
     final refresh = await storage.read(key: 'refreshToken');
     if (refresh == null) throw StateError('Session expired');
-    final r = await Dio().post(
-      '$apiUrl/auth/refresh',
-      data: {'refreshToken': refresh},
-    );
+    final r = await Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+      ),
+    ).post('$apiUrl/auth/refresh', data: {'refreshToken': refresh});
     await save(Map<String, dynamic>.from(r.data));
   }
 
@@ -125,12 +179,15 @@ class QChatClient {
           .build(),
     );
     socket!.onConnect((_) {
+      offline.value = false;
+      _checked.clear();
       flush();
       syncInbox();
       changes.add(null);
     });
     socket!.on('message:new', (event) async {
       try {
+        _checked.clear();
         final message = Map<String, dynamic>.from(event);
         confirmed[message['clientId']] = message;
         messageChanges.add(null);
@@ -153,6 +210,7 @@ class QChatClient {
       });
     }
     socket!.on('message:recall', (event) async {
+      _checked.clear();
       confirmed.removeWhere((_, m) => m['id'] == event['id']);
       final key = 'messages:${event['conversationId']}';
       final rows = await local?.read(key);
@@ -170,6 +228,7 @@ class QChatClient {
     });
     socket!.onDisconnect((_) async {
       if (stopping) return;
+      _connectionLost();
       try {
         await refresh();
         socket!.auth = {'token': token};
@@ -180,14 +239,66 @@ class QChatClient {
   }
 
   Future<dynamic> get(String path, {bool cached = true}) async {
+    if (!cached) return (await dio.get(path)).data;
+    final database = local;
+    dynamic saved;
     try {
+      saved = await database?.read(path);
+    } catch (_) {
+      // A storage failure must not prevent an online request.
+    }
+    if (saved != null) {
+      final checked = _checked[path];
+      if (checked == null ||
+          DateTime.now().difference(checked) > const Duration(seconds: 10)) {
+        unawaited(_fetchCached(path, database, saved).catchError((_) => null));
+      }
+      return saved;
+    }
+    return _fetchCached(path, database, null);
+  }
+
+  Future<dynamic> _fetchCached(
+    String path,
+    LocalDatabase? database,
+    dynamic saved,
+  ) async {
+    if (_requests.containsKey(path)) return _requests[path];
+    final request = _fetchAndStore(path, database, saved);
+    _requests[path] = request;
+    try {
+      return await request;
+    } finally {
+      _requests.remove(path);
+    }
+  }
+
+  Future<dynamic> _fetchAndStore(
+    String path,
+    LocalDatabase? database,
+    dynamic saved,
+  ) async {
+    try {
+      if (refreshing != null) await refreshing;
       final data = (await dio.get(path)).data;
-      if (cached) await local?.cache(path, data);
+      // Never write an old account's response into a newly logged-in account.
+      if (database != local) return data;
+      _checked[path] = DateTime.now();
+      try {
+        if (data != null) await database?.cache(path, data);
+      } catch (_) {}
+      if (saved != null && jsonEncode(saved) != jsonEncode(data)) {
+        changes.add(null);
+      }
       return data;
     } catch (e) {
-      if (cached) {
-        final data = await local?.read(path);
-        if (data != null) return data;
+      if (connectionFailure(e)) _connectionLost();
+      if (database == local &&
+          e is DioException &&
+          [401, 403, 404].contains(e.response?.statusCode)) {
+        await database?.removeCache(path);
+        _checked.remove(path);
+        if (saved != null) changes.add(null);
       }
       rethrow;
     }
@@ -397,6 +508,11 @@ class QChatClient {
   Future<void> logout() async {
     await post('/auth/logout', {});
     stopping = true;
+    _recovery?.cancel();
+    _recovery = null;
+    _checked.clear();
+    _requests.clear();
+    offline.value = false;
     socket?.dispose();
     socket = null;
     await local?.clear();
@@ -408,5 +524,12 @@ class QChatClient {
     outgoing.clear();
     confirmed.clear();
     receipts.clear();
+  }
+
+  void dispose() {
+    stopping = true;
+    _recovery?.cancel();
+    socket?.dispose();
+    dio.close(force: true);
   }
 }

@@ -43,6 +43,9 @@ class LocalDatabase extends GeneratedDatabase {
     return row == null ? null : jsonDecode(row.read<String>('value'));
   }
 
+  Future<void> removeCache(String key) =>
+      customStatement('DELETE FROM cache WHERE key = ?', [key]);
+
   Future<void> mergeMessages(
     String conversation,
     List<Map<String, dynamic>> messages,

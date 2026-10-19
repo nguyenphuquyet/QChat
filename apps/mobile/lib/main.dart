@@ -5,6 +5,7 @@ import 'package:tdesign_flutter/tdesign_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import 'app/providers.dart';
+import 'core/network/connection_banner.dart';
 import 'core/design_system/qchat_theme.dart';
 import 'core/design_system/components.dart';
 import 'core/design_system/reference_widgets.dart';
@@ -139,8 +140,13 @@ class _QChatAppState extends ConsumerState<QChatApp> {
     return MaterialApp.router(
       title: 'QChat',
       debugShowCheckedModeBanner: false,
-      builder: (context, child) =>
-          Material(type: MaterialType.transparency, child: child),
+      builder: (context, child) => Material(
+        type: MaterialType.transparency,
+        child: ConnectionBanner(
+          client: ref.read(clientProvider),
+          child: child ?? const SizedBox.shrink(),
+        ),
+      ),
       theme: qchatTheme(prefs.dark),
       locale: Locale(prefs.locale),
       supportedLocales: const [Locale('en'), Locale('vi'), Locale('zh')],

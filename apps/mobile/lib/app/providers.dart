@@ -1,7 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/network/client.dart';
 
-final clientProvider = Provider<QChatClient>((ref) => QChatClient());
+final clientProvider = Provider<QChatClient>((ref) {
+  final client = QChatClient();
+  ref.onDispose(client.dispose);
+  return client;
+});
 
 class Preferences extends Notifier<({String locale, bool dark})> {
   @override
