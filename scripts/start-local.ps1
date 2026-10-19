@@ -53,6 +53,8 @@ if (!(IsListening 3001)) {
 if (!(IsListening 8080)) {
   Start-Process -FilePath $node -WorkingDirectory $root -ArgumentList @('scripts/serve-web.mjs') -WindowStyle Hidden -RedirectStandardOutput "$runtime/web.log" -RedirectStandardError "$runtime/web-error.log" | Out-Null
 }
+for ($i=0; $i -lt 60 -and !(IsListening 3000); $i++) { Start-Sleep -Milliseconds 500 }
+if (!(IsListening 3000)) { throw 'Next.js did not become ready; see .tools/runtime/server-error.log' }
 Write-Output 'QChat web: http://localhost:8080'
 Write-Output 'QChat API: http://localhost:3000/api/health'
 Write-Output 'Local runtime logs: .tools/runtime'

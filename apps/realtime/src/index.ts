@@ -93,7 +93,6 @@ io.on("connection", (socket) => {
         v.sequence,
         name === "message:read",
       );
-      await notifyMembers(v.conversationId, name, r);
       return r;
     });
   event(

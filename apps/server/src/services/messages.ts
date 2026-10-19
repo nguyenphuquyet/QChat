@@ -140,9 +140,23 @@ export async function receipt(
   });
   requireCondition(sequence <= c.sequence, 400, "INVALID_SEQUENCE");
   const field = read ? "readSequence" : "deliveredSequence";
-  await db.conversationMember.updateMany({
-    where: { conversationId, userId, [field]: { lt: sequence } },
-    data: { [field]: sequence },
+  await db.$transaction(async (tx) => {
+    const changed = await tx.conversationMember.updateMany({
+      where: { conversationId, userId, [field]: { lt: sequence } },
+      data: { [field]: sequence },
+    });
+    if (read) await tx.conversationMember.updateMany({
+      where: { conversationId, userId, deliveredSequence: { lt: sequence } },
+      data: { deliveredSequence: sequence },
+    });
+    if (changed.count) {
+      const members = await tx.conversationMember.findMany({where:{conversationId}});
+      await tx.outbox.createMany({data:members.map(member => ({
+        event: read ? 'message:read' : 'message:delivered',
+        room: `user:${member.userId}`,
+        payload: {conversationId,userId,sequence},
+      }))});
+    }
   });
   return { conversationId, userId, sequence };
 }

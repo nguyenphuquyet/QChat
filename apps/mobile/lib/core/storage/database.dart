@@ -43,6 +43,21 @@ class LocalDatabase extends GeneratedDatabase {
     return row == null ? null : jsonDecode(row.read<String>('value'));
   }
 
+  Future<void> mergeMessages(
+    String conversation,
+    List<Map<String, dynamic>> messages,
+  ) => transaction(() async {
+    final key = 'messages:$conversation';
+    final rows = <String, dynamic>{};
+    final cached = (await read(key) as List?) ?? [];
+    for (final m in [...cached, ...messages]) {
+      rows[m['id']] = m;
+    }
+    final sorted = rows.values.toList()
+      ..sort((a, b) => (a['sequence'] as int).compareTo(b['sequence']));
+    await cache(key, sorted);
+  });
+
   Future<void> enqueue(Map<String, dynamic> payload) => customStatement(
     'INSERT OR IGNORE INTO outbox (id,conversation,payload,created) VALUES (?,?,?,?)',
     [
@@ -53,15 +68,27 @@ class LocalDatabase extends GeneratedDatabase {
     ],
   );
   Future<List<Map<String, dynamic>>> pending() async =>
-      (await customSelect('SELECT payload FROM outbox ORDER BY created').get())
+      (await customSelect(
+            'SELECT payload,created,error FROM outbox ORDER BY created',
+          ).get())
           .map(
-            (r) => Map<String, dynamic>.from(
-              jsonDecode(r.read<String>('payload')),
-            ),
+            (r) => {
+              ...Map<String, dynamic>.from(
+                jsonDecode(r.read<String>('payload')),
+              ),
+              'createdAt': DateTime.fromMillisecondsSinceEpoch(
+                r.read<int>('created'),
+              ).toIso8601String(),
+              'failed': r.readNullable<String>('error') != null,
+            },
           )
           .toList();
   Future<void> remove(String id) =>
       customStatement('DELETE FROM outbox WHERE id = ?', [id]);
+  Future<void> markFailed(String id, bool failed) => customStatement(
+    'UPDATE outbox SET error = ? WHERE id = ?',
+    [failed ? 'send_failed' : null, id],
+  );
   Future<void> clear() async {
     await customStatement('DELETE FROM cache');
     await customStatement('DELETE FROM outbox');

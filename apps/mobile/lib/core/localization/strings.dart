@@ -1,6 +1,15 @@
 import 'package:flutter/widgets.dart';
 
 const translations = <String, List<String>>{
+  'sending': ['Sending', 'Đang gửi', '发送中'],
+  'sent': ['Sent', 'Đã gửi', '已发送'],
+  'delivered': ['Delivered', 'Đã nhận', '已送达'],
+  'read': ['Read', 'Đã xem', '已读'],
+  'sendFailed': [
+    'Failed · tap to retry',
+    'Gửi lỗi · chạm để thử lại',
+    '发送失败 · 点击重试',
+  ],
   'chats': ['Chats', 'Trò chuyện', '聊天'],
   'contacts': ['Contacts', 'Danh bạ', '通讯录'],
   'discover': ['Discover', 'Khám phá', '发现'],

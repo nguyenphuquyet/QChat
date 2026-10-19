@@ -8,6 +8,7 @@ import 'package:dio/dio.dart';
 import '../../app/providers.dart';
 import '../../core/design_system/components.dart';
 import '../../core/localization/strings.dart';
+import 'message_status.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.id});
@@ -16,33 +17,78 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   final input = TextEditingController(), scroll = ScrollController();
   List<Map<String, dynamic>> messages = [];
   StreamSubscription<void>? updates;
+  StreamSubscription<void>? messageUpdates;
+  List<dynamic> members = [];
+  int readSequence = 0;
   String title = 'QChat';
   String? error, reply;
   bool loading = true, emoji = false, uploading = false;
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    scroll.addListener(() {
+      if (scroll.hasClients &&
+          scroll.position.extentAfter < 20 &&
+          messages.any((m) => (m['sequence'] as int? ?? 0) > readSequence)) {
+        load();
+      }
+    });
     load();
     updates = ref.read(clientProvider).changes.stream.listen((_) {
       if (mounted) load();
+    });
+    messageUpdates = ref.read(clientProvider).messageChanges.stream.listen((_) {
+      if (!mounted) return;
+      final nearEnd = !scroll.hasClients || scroll.position.extentAfter < 100;
+      final previousCount = messages.length;
+      setState(() {
+        messages = ref
+            .read(clientProvider)
+            .visibleMessages(widget.id, messages);
+        loading = false;
+      });
+      if (nearEnd ||
+          (messages.length > previousCount &&
+              messages.last['pending'] == true)) {
+        scrollToEnd();
+      }
     });
   }
 
   @override
   void dispose() {
     updates?.cancel();
+    messageUpdates?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     input.dispose();
     scroll.dispose();
     super.dispose();
   }
 
   bool fetching = false;
+  bool reload = false;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) load();
+  }
+
+  void scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (scroll.hasClients) scroll.jumpTo(scroll.position.maxScrollExtent);
+    });
+  }
+
   Future<void> load() async {
-    if (fetching) return;
+    if (fetching) {
+      reload = true;
+      return;
+    }
     fetching = true;
     final nearEnd =
         !scroll.hasClients ||
@@ -56,7 +102,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
       if (mounted) {
         setState(() {
-          messages = rows;
+          messages = client.visibleMessages(widget.id, rows);
+          members = c['members'];
           title = c['kind'] == 'GROUP'
               ? c['title']
               : others.isEmpty
@@ -66,13 +113,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         });
       }
       final sent = rows.where((m) => m['pending'] != true);
-      if (sent.isNotEmpty) {
+      if (sent.isNotEmpty &&
+          nearEnd &&
+          mounted &&
+          (WidgetsBinding.instance.lifecycleState ==
+              AppLifecycleState.resumed) &&
+          (ModalRoute.of(context)?.isCurrent ?? false) &&
+          (sent.last['sequence'] as int) > readSequence) {
         unawaited(
           client
               .post('/conversations/${widget.id}/read', {
                 'sequence': sent.last['sequence'],
               })
-              .catchError((_) => null),
+              .then((_) {
+                readSequence = sent.last['sequence'];
+              })
+              .catchError((_) {}),
         );
       }
       if (nearEnd) {
@@ -85,6 +141,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } finally {
       fetching = false;
       if (mounted) setState(() => loading = false);
+      if (reload && mounted) {
+        reload = false;
+        unawaited(load());
+      }
     }
   }
 
@@ -206,6 +266,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       await fn();
       await ref.read(clientProvider).local!.cache('messages:${widget.id}', []);
+      await ref.read(clientProvider).local!.cache('cursor:${widget.id}', 0);
+      ref
+          .read(clientProvider)
+          .confirmed
+          .removeWhere((_, m) => m['conversationId'] == widget.id);
       await load();
     } catch (e) {
       if (mounted) setState(() => error = tr(context, 'networkError'));
@@ -315,20 +380,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     ? tr(c, 'recalled')
                                     : m['text'] ?? '',
                               ),
-                              if (m['pending'] == true)
-                                GestureDetector(
-                                  onTap: () => ref.read(clientProvider).flush(),
-                                  child: Text(
-                                    tr(c, 'pending'),
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: QChatColors.muted,
-                                    ),
-                                  ),
-                                ),
                             ],
                           ),
                         ),
+                        if (mine && m['recalledAt'] == null)
+                          MessageStatus(
+                            status: ref
+                                .read(clientProvider)
+                                .messageStatus(m, members),
+                            onRetry: () => ref.read(clientProvider).flush(),
+                          ),
                       ],
                     );
                   },

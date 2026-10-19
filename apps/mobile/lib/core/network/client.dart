@@ -24,6 +24,11 @@ class QChatClient {
   );
   final storage = const FlutterSecureStorage();
   final changes = StreamController<void>.broadcast();
+  final messageChanges = StreamController<void>.broadcast(sync: true);
+  final Map<String, Map<String, dynamic>> outgoing = {};
+  final Map<String, Map<String, dynamic>> confirmed = {};
+  final Map<String, Map<String, int>> receipts = {};
+  final Map<String, Future<List<Map<String, dynamic>>>> syncing = {};
   String? userId, token;
   io.Socket? socket;
   LocalDatabase? local;
@@ -121,10 +126,34 @@ class QChatClient {
     );
     socket!.onConnect((_) {
       flush();
+      syncInbox();
       changes.add(null);
     });
-    socket!.on('message:new', (_) => changes.add(null));
+    socket!.on('message:new', (event) async {
+      try {
+        final message = Map<String, dynamic>.from(event);
+        confirmed[message['clientId']] = message;
+        messageChanges.add(null);
+        await syncing[event['conversationId']];
+        await messages(event['conversationId']);
+        changes.add(null);
+        messageChanges.add(null);
+      } catch (_) {}
+    });
+    for (final name in ['message:delivered', 'message:read']) {
+      socket!.on(name, (event) {
+        final key = '${event['conversationId']}:${event['userId']}';
+        final state = receipts.putIfAbsent(key, () => {});
+        final field = name == 'message:read'
+            ? 'readSequence'
+            : 'deliveredSequence';
+        final sequence = event['sequence'] as int;
+        if (sequence > (state[field] ?? 0)) state[field] = sequence;
+        messageChanges.add(null);
+      });
+    }
     socket!.on('message:recall', (event) async {
+      confirmed.removeWhere((_, m) => m['id'] == event['id']);
       final key = 'messages:${event['conversationId']}';
       final rows = await local?.read(key);
       if (rows is List) {
@@ -166,6 +195,55 @@ class QChatClient {
 
   Future<dynamic> post(String path, Object data) async =>
       (await dio.post(path, data: data)).data;
+  Future<void> syncInbox() async {
+    try {
+      final conversations = await get('/conversations', cached: false);
+      for (final c in conversations) {
+        await messages(c['id']);
+      }
+      changes.add(null);
+      messageChanges.add(null);
+    } catch (_) {}
+  }
+
+  String messageStatus(Map<String, dynamic> message, List<dynamic> members) {
+    if (message['failed'] == true) return 'sendFailed';
+    if (message['pending'] == true) return 'sending';
+    final sequence = message['sequence'] as int? ?? 0;
+    final peers = members.where((m) => m['userId'] != userId).toList();
+    bool reached(String field) =>
+        peers.isNotEmpty &&
+        peers.every((m) {
+          final live =
+              receipts['${message['conversationId']}:${m['userId']}']?[field] ??
+              0;
+          return (live > (m[field] ?? 0) ? live : (m[field] ?? 0)) >= sequence;
+        });
+    if (reached('readSequence')) return 'read';
+    if (reached('deliveredSequence')) return 'delivered';
+    return 'sent';
+  }
+
+  List<Map<String, dynamic>> visibleMessages(
+    String id,
+    List<Map<String, dynamic>> base,
+  ) {
+    final rows = <String, Map<String, dynamic>>{};
+    for (final m in [...base, ...outgoing.values, ...confirmed.values]) {
+      if (m['conversationId'] == id) rows[m['clientId'] ?? m['id']] = m;
+    }
+    final result = rows.values.toList();
+    result.sort((a, b) {
+      if (a['sequence'] != null && b['sequence'] != null) {
+        return (a['sequence'] as int).compareTo(b['sequence']);
+      }
+      if (a['sequence'] != null) return -1;
+      if (b['sequence'] != null) return 1;
+      return (a['createdAt'] as String).compareTo(b['createdAt']);
+    });
+    return result;
+  }
+
   Future<void> send(
     String conversation,
     String text, {
@@ -181,23 +259,63 @@ class QChatClient {
       'mediaId': ?mediaId,
       'replyToId': ?replyToId,
     };
-    await local!.enqueue(payload);
-    changes.add(null);
-    await flush();
+    final id = payload['clientId']!;
+    outgoing[id] = {
+      ...payload,
+      'id': id,
+      'senderId': userId,
+      'pending': true,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    messageChanges.add(null);
+    try {
+      await local!.enqueue(payload);
+      unawaited(flush());
+    } catch (_) {
+      outgoing[id]!['failed'] = true;
+      messageChanges.add(null);
+      rethrow;
+    }
   }
 
   Future<void> flush() async {
     if (flushing || local == null) return;
     flushing = true;
     try {
-      for (final p in await local!.pending()) {
+      while (true) {
+        final queue = await local!.pending();
+        if (queue.isEmpty) break;
+        final p = queue.first;
         try {
-          await post(
-            '/conversations/${p['conversationId']}/messages',
-            {...p}..remove('conversationId'),
+          await local!.markFailed(p['clientId'], false);
+          outgoing[p['clientId']] = {
+            ...p,
+            'id': p['clientId'],
+            'senderId': userId,
+            'pending': true,
+            'failed': false,
+          };
+          messageChanges.add(null);
+          final result = Map<String, dynamic>.from(
+            await post(
+              '/conversations/${p['conversationId']}/messages',
+              {...p}
+                ..remove('conversationId')
+                ..remove('createdAt')
+                ..remove('failed'),
+            ),
           );
+          confirmed[p['clientId']] = result;
+          await local!.mergeMessages(p['conversationId'], [result]);
           await local!.remove(p['clientId']);
+          outgoing.remove(p['clientId']);
+          messageChanges.add(null);
         } catch (_) {
+          for (final waiting in await local!.pending()) {
+            outgoing[waiting['clientId']]?['failed'] = true;
+            await local!.markFailed(waiting['clientId'], true);
+          }
+          messageChanges.add(null);
           break;
         }
       }
@@ -208,14 +326,24 @@ class QChatClient {
   }
 
   Future<List<Map<String, dynamic>>> messages(String id) async {
+    if (syncing.containsKey(id)) return syncing[id]!;
+    final future = _messages(id);
+    syncing[id] = future;
+    try {
+      return await future;
+    } finally {
+      syncing.remove(id);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _messages(String id) async {
     final key = 'messages:$id';
     final old = List<Map<String, dynamic>>.from(
       (await local!.read(key) ?? []).map((e) => Map<String, dynamic>.from(e)),
     );
-    int cursor = old.fold<int>(
-      0,
-      (n, m) => (m['sequence'] as int) > n ? m['sequence'] : n,
-    );
+    // A send acknowledgement can arrive ahead of missing incoming messages.
+    // Only a completed history sync may advance this cursor.
+    int cursor = await local!.read('cursor:$id') as int? ?? 0;
     try {
       while (true) {
         final batch = List<Map<String, dynamic>>.from(
@@ -225,15 +353,30 @@ class QChatClient {
           )).map((e) => Map<String, dynamic>.from(e)),
         );
         for (final m in batch) {
+          if (outgoing.containsKey(m['clientId']) ||
+              confirmed.containsKey(m['clientId'])) {
+            confirmed[m['clientId']] = m;
+          }
           old.removeWhere((x) => x['id'] == m['id']);
           old.add(m);
           cursor = m['sequence'];
         }
         if (batch.length < 50) break;
       }
-      await local!.cache(key, old);
+      await local!.mergeMessages(id, old);
+      await local!.cache('cursor:$id', cursor);
+      for (final m in old) {
+        if (outgoing.containsKey(m['clientId'])) {
+          confirmed[m['clientId']] = m;
+          await local!.remove(m['clientId']);
+          outgoing.remove(m['clientId']);
+        }
+      }
+      if (cursor > 0) {
+        await post('/conversations/$id/delivered', {'sequence': cursor});
+      }
     } catch (_) {
-      if (old.isEmpty) rethrow;
+      // Keep the outbox visible even when the first network request fails.
     }
     final pending = (await local!.pending())
         .where((m) => m['conversationId'] == id)
@@ -243,10 +386,12 @@ class QChatClient {
             'id': m['clientId'],
             'senderId': userId,
             'pending': true,
-            'createdAt': DateTime.now().toIso8601String(),
           },
         );
-    return [...old, ...pending];
+    for (final m in pending) {
+      outgoing.putIfAbsent(m['clientId'], () => m);
+    }
+    return visibleMessages(id, old);
   }
 
   Future<void> logout() async {
@@ -260,5 +405,8 @@ class QChatClient {
     await storage.deleteAll();
     token = null;
     userId = null;
+    outgoing.clear();
+    confirmed.clear();
+    receipts.clear();
   }
 }

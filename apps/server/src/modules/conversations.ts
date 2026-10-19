@@ -112,13 +112,13 @@ export async function conversationsRoute(
       });
     }
   }
-  if (sub === "read" && method === "POST")
+  if ((sub === "read" || sub === "delivered") && method === "POST")
     return receipt(
       userId,
       id,
       z.object({ sequence: z.number().int().nonnegative() }).parse(body)
         .sequence,
-      true,
+      sub === "read",
     );
   if (sub === "state" && method === "PATCH") {
     const data = z

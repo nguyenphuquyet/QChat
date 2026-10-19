@@ -116,6 +116,34 @@ test(
         b.accessToken,
       );
       assert.equal(history.data.length, 1);
+      const sender = io(process.env.TEST_REALTIME_URL ?? "http://localhost:3001", {
+        transports: ["websocket"], auth: {token:a.accessToken},
+      });
+      try {
+        await new Promise<void>((resolve,reject) => {
+          sender.once('connect',resolve); sender.once('connect_error',reject);
+        });
+        for (const state of ['delivered','read']) {
+          const event = new Promise<any>((resolve,reject) => {
+            const timeout = setTimeout(() => reject(new Error(`Missing ${state} receipt`)),10000);
+            sender.once(`message:${state}`, data => { clearTimeout(timeout); resolve(data); });
+          });
+          assert.equal((await request(`/conversations/${conversation.id}/${state}`,
+            'POST',{sequence:first.data.sequence},b.accessToken)).status,200);
+          const receipt = await event;
+          assert.equal(receipt.userId,b.userId);
+          assert.equal(receipt.sequence,first.data.sequence);
+        }
+        assert.equal((await request(`/conversations/${conversation.id}/read`,
+          'POST',{sequence:first.data.sequence+1},b.accessToken)).status,400);
+        assert.equal((await request(`/conversations/${conversation.id}/read`,
+          'POST',{sequence:first.data.sequence},outsider.accessToken)).status,403);
+        await request(`/conversations/${conversation.id}/read`,'POST',{sequence:0},b.accessToken);
+        const current = await request(`/conversations/${conversation.id}`,'GET',undefined,a.accessToken);
+        const peer = current.data.members.find((m:any) => m.userId === b.userId);
+        assert.equal(peer.readSequence,first.data.sequence);
+        assert.equal(peer.deliveredSequence,first.data.sequence);
+      } finally { sender.disconnect(); }
       const refresh = await request("/auth/refresh", "POST", {
         refreshToken: a.refreshToken,
       });
