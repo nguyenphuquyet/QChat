@@ -7,7 +7,8 @@ COPY apps/server/package.json apps/server/package.json
 COPY apps/realtime/package.json apps/realtime/package.json
 RUN pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm db:generate && pnpm build
+ARG BUILD_NODE_OPTIONS=--max-old-space-size=1536
+RUN pnpm db:generate && NODE_OPTIONS="$BUILD_NODE_OPTIONS" pnpm build
 ENV NODE_ENV=production
 USER node
 EXPOSE 3000 3001
