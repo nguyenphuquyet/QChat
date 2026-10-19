@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPage;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tdesign_flutter/tdesign_flutter.dart';
@@ -29,8 +31,11 @@ GoRoute qchatRoute({
       CupertinoPage<void>(key: state.pageKey, child: builder(context, state)),
 );
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
   runApp(const ProviderScope(child: QChatApp()));
 }
 

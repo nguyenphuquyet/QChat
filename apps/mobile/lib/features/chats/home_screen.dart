@@ -75,6 +75,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   ]);
   @override
   Widget build(BuildContext c) => QChatPage(
+    statusBackground: index == 3 ? surface(c) : null,
+    navigationBackground: navigationSurface(c),
     title: index == 3
         ? null
         : index == 0

@@ -1,4 +1,5 @@
 import 'package:tdesign_flutter/tdesign_flutter.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import '../localization/strings.dart';
 import 'qchat_colors.dart';
@@ -16,6 +17,11 @@ Color ink(BuildContext context) =>
     ? const Color(0xffeeeeee)
     : QChatColors.ink;
 
+Color navigationSurface(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+    ? surface(context)
+    : const Color(0xfff7f7f7);
+
 class QChatPage extends StatelessWidget {
   const QChatPage({
     super.key,
@@ -25,25 +31,76 @@ class QChatPage extends StatelessWidget {
     this.trailing,
     this.bottom,
     this.background,
+    this.statusBackground,
+    this.navigationBackground,
   });
   final Widget child;
   final String? title;
   final Widget? leading, trailing, bottom;
-  final Color? background;
+  final Color? background, statusBackground, navigationBackground;
   @override
-  Widget build(BuildContext c) => ColoredBox(
-    color: background ?? Theme.of(c).scaffoldBackgroundColor,
-    child: SafeArea(
-      child: Column(
-        children: [
-          if (title != null)
-            QChatAppBar(title: title!, leading: leading, trailing: trailing),
-          Expanded(child: child),
-          ?bottom,
-        ],
+  Widget build(BuildContext c) {
+    final pageColor = background ?? Theme.of(c).scaffoldBackgroundColor;
+    final topColor = statusBackground ?? pageColor;
+    final bottomColor = navigationBackground ?? pageColor;
+    final topBrightness = ThemeData.estimateBrightnessForColor(topColor);
+    final bottomBrightness = ThemeData.estimateBrightnessForColor(bottomColor);
+    final padding = MediaQuery.paddingOf(c);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+        statusBarBrightness: topBrightness,
+        statusBarIconBrightness: topBrightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+        systemNavigationBarIconBrightness: bottomBrightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
       ),
-    ),
-  );
+      child: ColoredBox(
+        color: pageColor,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Paint the system insets with this screen's surfaces. SafeArea
+            // still keeps controls clear of the notch and gesture region.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: padding.top,
+              child: ColoredBox(color: topColor),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: padding.bottom,
+              child: ColoredBox(color: bottomColor),
+            ),
+            SafeArea(
+              child: Column(
+                children: [
+                  if (title != null)
+                    QChatAppBar(
+                      title: title!,
+                      leading: leading,
+                      trailing: trailing,
+                    ),
+                  Expanded(child: child),
+                  ?bottom,
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class QChatAppBar extends StatelessWidget {
@@ -378,9 +435,7 @@ class QChatBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext c) => Container(
     decoration: BoxDecoration(
-      color: Theme.of(c).brightness == Brightness.dark
-          ? surface(c)
-          : const Color(0xfff7f7f7),
+      color: navigationSurface(c),
       border: Border(
         top: BorderSide(color: ink(c).withValues(alpha: .12), width: .5),
       ),
