@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPage;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tdesign_flutter/tdesign_flutter.dart';
 import 'package:go_router/go_router.dart';
+
 import 'app/providers.dart';
 import 'core/design_system/qchat_theme.dart';
 import 'core/design_system/components.dart';
+import 'core/design_system/reference_widgets.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/chats/home_screen.dart';
 import 'features/chats/chat_screen.dart';
@@ -15,6 +18,15 @@ import 'features/moments/moments_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/calls/call_screen.dart';
+
+GoRoute qchatRoute({
+  required String path,
+  required Widget Function(BuildContext, GoRouterState) builder,
+}) => GoRoute(
+  path: path,
+  pageBuilder: (context, state) =>
+      CupertinoPage<void>(key: state.pageKey, child: builder(context, state)),
+);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,42 +47,57 @@ class _QChatAppState extends ConsumerState<QChatApp> {
     router = GoRouter(
       initialLocation: '/login',
       routes: [
-        GoRoute(path: '/login', builder: (_, s) => const AuthScreen()),
-        GoRoute(path: '/home', builder: (_, s) => const HomeScreen()),
-        GoRoute(
+        qchatRoute(path: '/login', builder: (_, s) => const AuthScreen()),
+        qchatRoute(path: '/home', builder: (_, s) => const HomeScreen()),
+        qchatRoute(
           path: '/chat/:id',
           builder: (_, s) => ChatScreen(id: s.pathParameters['id']!),
         ),
-        GoRoute(
+        qchatRoute(
           path: '/friends',
           builder: (_, s) => FriendsScreen(query: s.uri.queryParameters['q']),
         ),
-        GoRoute(path: '/groups/new', builder: (_, s) => const GroupScreen()),
-        GoRoute(path: '/moments', builder: (_, s) => const MomentsScreen()),
-        GoRoute(path: '/profile', builder: (_, s) => const ProfileScreen()),
-        GoRoute(path: '/qr', builder: (_, s) => const ProfileScreen(qr: true)),
-        GoRoute(path: '/scan', builder: (_, s) => const ScanScreen()),
-        GoRoute(path: '/settings', builder: (_, s) => const SettingsScreen()),
-        GoRoute(
+        qchatRoute(path: '/groups/new', builder: (_, s) => const GroupScreen()),
+        qchatRoute(path: '/moments', builder: (_, s) => const MomentsScreen()),
+        qchatRoute(path: '/profile', builder: (_, s) => const ProfileScreen()),
+        qchatRoute(
+          path: '/qr',
+          builder: (_, s) => const ProfileScreen(qr: true),
+        ),
+        qchatRoute(path: '/scan', builder: (_, s) => const ScanScreen()),
+        qchatRoute(
+          path: '/settings',
+          builder: (_, s) => const SettingsScreen(),
+        ),
+        qchatRoute(
+          path: '/settings/:kind',
+          builder: (_, s) =>
+              SettingsDetailScreen(kind: s.pathParameters['kind']!),
+        ),
+        qchatRoute(
+          path: '/feature/:kind',
+          builder: (_, s) => FeatureScreen(kind: s.pathParameters['kind']!),
+        ),
+        qchatRoute(
           path: '/sessions',
           builder: (_, s) => const DataListScreen(kind: 'sessions'),
         ),
-        GoRoute(
+        qchatRoute(
           path: '/favorites',
           builder: (_, s) => const DataListScreen(kind: 'favorites'),
         ),
-        GoRoute(
+        qchatRoute(
           path: '/media/:id',
           builder: (_, s) => MediaScreen(id: s.pathParameters['id']!),
         ),
-        GoRoute(
+        qchatRoute(
           path: '/call/:id',
           builder: (_, s) => CallScreen(
             conversationId: s.pathParameters['id']!,
             video: s.uri.queryParameters['video'] == 'true',
           ),
         ),
-        GoRoute(
+        qchatRoute(
           path: '/about',
           builder: (c, s) => QChatPage(
             title: 'QChat',
@@ -112,7 +139,8 @@ class _QChatAppState extends ConsumerState<QChatApp> {
     return MaterialApp.router(
       title: 'QChat',
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => Material(type: MaterialType.transparency, child: child),
+      builder: (context, child) =>
+          Material(type: MaterialType.transparency, child: child),
       theme: qchatTheme(prefs.dark),
       locale: Locale(prefs.locale),
       supportedLocales: const [Locale('en'), Locale('vi'), Locale('zh')],

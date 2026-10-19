@@ -13,6 +13,11 @@ ThemeData qchatTheme(bool dark) => ThemeData(
   extensions: [
     TThemeData.defaultData(),
     TInputThemeData(
+      hintStyle: const TextStyle(
+        fontFamily: 'Arial',
+        fontSize: 16,
+        color: Color(0xffb2b2b2),
+      ),
       backgroundColor: dark ? const Color(0xff222222) : Colors.white,
       borderColor: dark ? const Color(0xff333333) : QChatColors.line,
       borderRadius: 5,

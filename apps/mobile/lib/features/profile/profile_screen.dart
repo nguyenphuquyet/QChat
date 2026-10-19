@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:tdesign_flutter/tdesign_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -6,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../app/providers.dart';
 import '../../core/design_system/components.dart';
 import '../../core/localization/strings.dart';
+import '../../core/design_system/reference_widgets.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, this.qr = false});
@@ -19,6 +21,77 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late Future<dynamic> profile;
   bool initialized = false;
   String? error;
+  Future<void> edit(String field, String label, String initial) async {
+    final controller = TextEditingController(text: initial);
+    bool saving = false;
+    String? failure;
+    final route = CupertinoPageRoute<void>(
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => QChatPage(
+          title: tr(c, label),
+          leading: QChatIconButton(
+            'back',
+            label: tr(c, 'back'),
+            onTap: () => Navigator.pop(c),
+          ),
+          trailing: GestureDetector(
+            onTap: saving
+                ? null
+                : () async {
+                    update(() => saving = true);
+                    try {
+                      await ref
+                          .read(clientProvider)
+                          .dio
+                          .patch(
+                            '/users/me',
+                            data: {field: controller.text.trim()},
+                          );
+                      if (c.mounted) Navigator.pop(c);
+                      if (mounted) {
+                        setState(
+                          () => profile = ref
+                              .read(clientProvider)
+                              .get('/users/me'),
+                        );
+                      }
+                    } catch (_) {
+                      if (c.mounted) {
+                        update(() {
+                          saving = false;
+                          failure = tr(c, 'networkError');
+                        });
+                      }
+                    }
+                  },
+            child: Center(
+              child: Text(
+                tr(c, saving ? 'loading' : 'save'),
+                style: const TextStyle(color: QChatColors.green),
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                QChatTextInput(
+                  controller: controller,
+                  hint: tr(c, label),
+                  lines: field == 'bio' ? 3 : 1,
+                ),
+                if (failure != null) Text(failure!),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await Navigator.of(context).push<void>(route);
+    await route.completed;
+    controller.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -78,30 +151,58 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           );
         }
         return ListView(
-          padding: const EdgeInsets.all(20),
           children: [
-            QChatTextInput(controller: name, hint: tr(c, 'nickname')),
-            const SizedBox(height: 12),
-            QChatTextInput(controller: bio, hint: tr(c, 'bio'), lines: 3),
-            const SizedBox(height: 20),
-            QChatButton(
-              tr(c, 'save'),
-              onTap: () async {
-                try {
-                  await ref
-                      .read(clientProvider)
-                      .dio
-                      .patch(
-                        '/users/me',
-                        data: {'nickname': name.text, 'bio': bio.text},
-                      );
-                  if (c.mounted) c.pop();
-                } catch (e) {
-                  if (mounted) setState(() => error = tr(c, 'networkError'));
-                }
-              },
+            MenuRow(
+              'avatar',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  QChatAvatar(u['nickname'], size: 34),
+                  const SizedBox(width: 9),
+                  const QChatIcon(
+                    'chevron',
+                    size: 18,
+                    color: QChatColors.muted,
+                  ),
+                ],
+              ),
             ),
-            if (error != null) Text(error!),
+            MenuRow(
+              'name',
+              value: u['nickname'],
+              onTap: () => edit('nickname', 'name', u['nickname']),
+            ),
+            MenuRow('gender', value: tr(c, 'notSet')),
+            const MenuRow('region'),
+            MenuRow('phone', value: tr(c, 'notSet')),
+            MenuRow('ID', value: u['qchatId'], onTap: () => c.push('/qr')),
+            MenuRow(
+              'qr',
+              trailing: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  QChatIcon('qr', color: QChatColors.muted, size: 22),
+                  SizedBox(width: 9),
+                  QChatIcon('chevron', size: 18, color: QChatColors.muted),
+                ],
+              ),
+              onTap: () => c.push('/qr'),
+            ),
+            const MenuRow('poke'),
+            MenuRow(
+              'status',
+              value: (u['bio'] ?? '').toString().isEmpty
+                  ? tr(c, 'notSet')
+                  : u['bio'],
+              onTap: () => edit('bio', 'status', u['bio'] ?? ''),
+            ),
+            sectionGap,
+            const MenuRow('ringtone'),
+            sectionGap,
+            const MenuRow('addresses'),
+            const MenuRow('invoice'),
+            sectionGap,
+            const MenuRow('beans'),
           ],
         );
       },
@@ -144,4 +245,3 @@ class _ScanScreenState extends State<ScanScreen> {
     ),
   );
 }
-

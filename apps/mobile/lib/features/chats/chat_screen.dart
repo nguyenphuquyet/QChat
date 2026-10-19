@@ -9,6 +9,7 @@ import '../../app/providers.dart';
 import '../../core/design_system/components.dart';
 import '../../core/localization/strings.dart';
 import 'message_status.dart';
+import '../../core/design_system/reference_widgets.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.id});
@@ -28,6 +29,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   String title = 'QChat';
   String? error, reply;
   bool loading = true, emoji = false, uploading = false;
+  bool attachments = false, voice = false;
+  String myName = 'Q';
   @override
   void initState() {
     super.initState();
@@ -104,6 +107,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         setState(() {
           messages = client.visibleMessages(widget.id, rows);
           members = c['members'];
+          final own = members.where((m) => m['userId'] == client.userId);
+          if (own.isNotEmpty) myName = own.first['user']['nickname'];
           title = c['kind'] == 'GROUP'
               ? c['title']
               : others.isEmpty
@@ -160,19 +165,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  Future<void> attach() async {
+  Future<void> attach({List<String>? extensions}) async {
     final result = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: [
-        'jpg',
-        'jpeg',
-        'png',
-        'gif',
-        'webp',
-        'mp4',
-        'mp3',
-        'pdf',
-      ],
+      allowedExtensions:
+          extensions ??
+          ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mp3', 'pdf'],
     );
     if (result == null) return;
     final file = result;
@@ -221,6 +219,85 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } finally {
       if (mounted) setState(() => uploading = false);
     }
+  }
+
+  String messageTime(dynamic raw) {
+    final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+    if (d == null) return '';
+    final now = DateTime.now();
+    final time =
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    return d.year == now.year && d.month == now.month && d.day == now.day
+        ? time
+        : '${d.day}/${d.month} $time';
+  }
+
+  bool showTime(int i) {
+    if (i == 0) return true;
+    final a = DateTime.tryParse(messages[i]['createdAt']?.toString() ?? '');
+    final b = DateTime.tryParse(messages[i - 1]['createdAt']?.toString() ?? '');
+    return a != null && b != null && a.difference(b).inMinutes.abs() >= 5;
+  }
+
+  Widget attachmentPanel(BuildContext c) {
+    final actions = <(String, String, VoidCallback)>[
+      (
+        'image',
+        'image',
+        () => attach(extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp']),
+      ),
+      ('camera', 'camera', () => openFeature(c, 'camera')),
+      ('location', 'location', () => openFeature(c, 'location')),
+      ('favorites', 'favorites', () => c.push('/favorites')),
+      ('me', 'contactCard', () => openFeature(c, 'contactCard')),
+      ('file', 'file', () => attach()),
+      ('music', 'music', () => attach(extensions: ['mp3'])),
+    ];
+    return Container(
+      height: 245,
+      color: surface(c).withValues(alpha: .6),
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+      child: GridView.count(
+        crossAxisCount: 4,
+        childAspectRatio: .88,
+        children: [
+          for (final a in actions)
+            GestureDetector(
+              onTap: uploading ? null : a.$3,
+              child: Column(
+                children: [
+                  Container(
+                    width: 62,
+                    height: 62,
+                    decoration: BoxDecoration(
+                      color: surface(c),
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+                    child: Center(
+                      child: QChatIcon(
+                        a.$1,
+                        size: 29,
+                        color: const Color(0xff505050),
+                        filled: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    tr(c, a.$2),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xff888888),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   void menu(Map<String, dynamic> m) {
@@ -278,205 +355,255 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   @override
-  Widget build(BuildContext c) => QChatPage(
-    title: title,
-    leading: QChatIconButton(
-      'back',
-      label: tr(c, 'back'),
-      onTap: () => context.go('/home'),
-    ),
-    trailing: QChatIconButton(
-      'more',
-      label: tr(c, 'settings'),
-      onTap: () => qchatSheet(c, [
-        (tr(c, 'call'), () => context.push('/call/${widget.id}?video=false')),
-        (
-          tr(c, 'videoCall'),
-          () => context.push('/call/${widget.id}?video=true'),
-        ),
-        (
-          tr(c, 'mute'),
-          () => operation(
-            () => ref
-                .read(clientProvider)
-                .dio
-                .patch(
-                  '/conversations/${widget.id}/state',
-                  data: {'muted': true},
-                ),
+  Widget build(BuildContext c) {
+    final lastOutgoing = messages.lastIndexWhere(
+      (message) =>
+          message['senderId'] == ref.read(clientProvider).userId &&
+          message['recalledAt'] == null,
+    );
+    return QChatPage(
+      title: title,
+      leading: QChatIconButton(
+        'back',
+        label: tr(c, 'back'),
+        onTap: () => context.canPop() ? context.pop() : context.go('/home'),
+      ),
+      trailing: QChatIconButton(
+        'more',
+        label: tr(c, 'settings'),
+        onTap: () => qchatSheet(c, [
+          (tr(c, 'call'), () => context.push('/call/${widget.id}?video=false')),
+          (
+            tr(c, 'videoCall'),
+            () => context.push('/call/${widget.id}?video=true'),
           ),
-        ),
-      ]),
-    ),
-    child: Column(
-      children: [
-        if (error != null)
-          GestureDetector(
-            onTap: load,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                error!,
-                style: const TextStyle(color: QChatColors.danger, fontSize: 12),
-              ),
+          (
+            tr(c, 'mute'),
+            () => operation(
+              () => ref
+                  .read(clientProvider)
+                  .dio
+                  .patch(
+                    '/conversations/${widget.id}/state',
+                    data: {'muted': true},
+                  ),
             ),
           ),
-        Expanded(
-          child: loading
-              ? const QChatLoading()
-              : messages.isEmpty
-              ? QChatEmptyState(tr(c, 'emptyChats'))
-              : ListView.builder(
-                  controller: scroll,
-                  itemCount: messages.length,
-                  itemBuilder: (c, i) {
-                    final m = messages[i],
-                        mine = m['senderId'] == ref.read(clientProvider).userId;
-                    return Column(
-                      children: [
-                        if (i == 0 || i % 15 == 0)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Text(
-                              (m['createdAt'] ?? '')
-                                  .toString()
-                                  .replaceFirst('T', ' ')
-                                  .substring(0, 16),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: QChatColors.muted,
+        ]),
+      ),
+      child: Column(
+        children: [
+          if (error != null)
+            GestureDetector(
+              onTap: load,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  error!,
+                  style: const TextStyle(
+                    color: QChatColors.danger,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: loading
+                ? const QChatLoading()
+                : messages.isEmpty
+                ? QChatEmptyState(tr(c, 'emptyChats'))
+                : ListView.builder(
+                    controller: scroll,
+                    itemCount: messages.length,
+                    itemBuilder: (c, i) {
+                      final m = messages[i],
+                          mine =
+                              m['senderId'] == ref.read(clientProvider).userId;
+                      return Column(
+                        children: [
+                          if (showTime(i))
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Text(
+                                messageTime(m['createdAt']),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: QChatColors.muted,
+                                ),
                               ),
                             ),
-                          ),
-                        QChatChatBubble(
-                          mine: mine,
-                          name: mine ? 'Q' : title,
-                          onLongPress: () => menu(m),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (m['replyToId'] != null)
-                                Text(
-                                  '↳ ${tr(c, 'reply')}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: QChatColors.muted,
-                                  ),
-                                ),
-                              if (m['mediaId'] != null)
-                                GestureDetector(
-                                  onTap: () =>
-                                      context.push('/media/${m['mediaId']}'),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: QChatIcon(
-                                      m['kind'] == 'IMAGE' ? 'image' : 'file',
-                                      size: 40,
+                          QChatChatBubble(
+                            mine: mine,
+                            name: mine ? myName : title,
+                            onLongPress: () => menu(m),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (m['replyToId'] != null)
+                                  Text(
+                                    '↳ ${tr(c, 'reply')}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: QChatColors.muted,
                                     ),
                                   ),
+                                if (m['mediaId'] != null)
+                                  GestureDetector(
+                                    onTap: () =>
+                                        context.push('/media/${m['mediaId']}'),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: QChatIcon(
+                                        m['kind'] == 'IMAGE' ? 'image' : 'file',
+                                        size: 40,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  m['recalledAt'] != null
+                                      ? tr(c, 'recalled')
+                                      : m['text'] ?? '',
                                 ),
-                              Text(
-                                m['recalledAt'] != null
-                                    ? tr(c, 'recalled')
-                                    : m['text'] ?? '',
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        if (mine && m['recalledAt'] == null)
-                          MessageStatus(
-                            status: ref
-                                .read(clientProvider)
-                                .messageStatus(m, members),
-                            onRetry: () => ref.read(clientProvider).flush(),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-        ),
-        if (reply != null)
-          QChatListTile(
-            title: tr(c, 'reply'),
-            trailing: QChatButton(
-              tr(c, 'cancel'),
-              onTap: () => setState(() => reply = null),
-            ),
-          ),
-        Container(
-          color: surface(c),
-          padding: EdgeInsets.fromLTRB(
-            8,
-            7,
-            8,
-            7 + MediaQuery.viewInsetsOf(c).bottom,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: QChatTextInput(
-                  controller: input,
-                  hint: tr(c, 'message'),
-                  lines: 4,
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              QChatIconButton(
-                'emoji',
-                label: 'Emoji',
-                onTap: () => setState(() => emoji = !emoji),
-              ),
-              if (input.text.trim().isEmpty)
-                QChatIconButton(
-                  'plus',
-                  label: tr(c, 'file'),
-                  onTap: uploading ? () {} : attach,
-                )
-              else
-                QChatButton(tr(c, 'send'), onTap: send),
-            ],
-          ),
-        ),
-        if (uploading) Text(tr(c, 'loading')),
-        if (emoji)
-          Container(
-            color: surface(c),
-            height: 160,
-            child: GridView.count(
-              crossAxisCount: 8,
-              children: [
-                for (final e in [
-                  '😀',
-                  '😊',
-                  '😂',
-                  '🥰',
-                  '😍',
-                  '🤔',
-                  '😢',
-                  '😎',
-                  '👍',
-                  '👏',
-                  '🙏',
-                  '💚',
-                  '❤️',
-                  '🎉',
-                  '🌻',
-                  '☕',
-                ])
-                  GestureDetector(
-                    onTap: () {
-                      input.text += e;
-                      setState(() {});
+                          if (i == lastOutgoing)
+                            MessageStatus(
+                              status: ref
+                                  .read(clientProvider)
+                                  .messageStatus(m, members),
+                              onRetry: () => ref.read(clientProvider).flush(),
+                            ),
+                        ],
+                      );
                     },
-                    child: Center(
-                      child: Text(e, style: const TextStyle(fontSize: 26)),
-                    ),
                   ),
+          ),
+          if (reply != null)
+            QChatListTile(
+              title: tr(c, 'reply'),
+              trailing: QChatButton(
+                tr(c, 'cancel'),
+                onTap: () => setState(() => reply = null),
+              ),
+            ),
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(c).brightness == Brightness.dark
+                  ? surface(c)
+                  : const Color(0xfff7f7f7),
+              border: const Border(
+                top: BorderSide(color: QChatColors.line, width: .5),
+              ),
+            ),
+            padding: EdgeInsets.fromLTRB(
+              8,
+              7,
+              8,
+              7 + MediaQuery.viewInsetsOf(c).bottom,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                QChatIconButton(
+                  voice ? 'keyboard' : 'voice',
+                  size: 28,
+                  label: tr(c, 'voice'),
+                  onTap: () => setState(() {
+                    voice = !voice;
+                    attachments = false;
+                    emoji = false;
+                  }),
+                ),
+                Expanded(
+                  child: voice
+                      ? GestureDetector(
+                          onTap: () => openFeature(c, 'voice'),
+                          child: Container(
+                            height: 42,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: QChatColors.line),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(tr(c, 'holdToTalk')),
+                          ),
+                        )
+                      : QChatTextInput(
+                          controller: input,
+                          hint: '',
+                          lines: 4,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                ),
+                QChatIconButton(
+                  'emoji',
+                  size: 28,
+                  label: 'Emoji',
+                  onTap: () => setState(() {
+                    emoji = !emoji;
+                    attachments = false;
+                    voice = false;
+                    FocusScope.of(c).unfocus();
+                  }),
+                ),
+                if (input.text.trim().isEmpty)
+                  QChatIconButton(
+                    'plus',
+                    size: 28,
+                    label: tr(c, 'file'),
+                    onTap: () => setState(() {
+                      attachments = !attachments;
+                      emoji = false;
+                      FocusScope.of(c).unfocus();
+                    }),
+                  )
+                else
+                  QChatButton(tr(c, 'send'), onTap: send),
               ],
             ),
           ),
-      ],
-    ),
-  );
+          if (uploading) Text(tr(c, 'loading')),
+          if (attachments) attachmentPanel(c),
+          if (emoji)
+            Container(
+              color: surface(c),
+              height: 160,
+              child: GridView.count(
+                crossAxisCount: 8,
+                children: [
+                  for (final e in [
+                    '😀',
+                    '😊',
+                    '😂',
+                    '🥰',
+                    '😍',
+                    '🤔',
+                    '😢',
+                    '😎',
+                    '👍',
+                    '👏',
+                    '🙏',
+                    '💚',
+                    '❤️',
+                    '🎉',
+                    '🌻',
+                    '☕',
+                  ])
+                    GestureDetector(
+                      onTap: () {
+                        input.text += e;
+                        setState(() {});
+                      },
+                      child: Center(
+                        child: Text(e, style: const TextStyle(fontSize: 26)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

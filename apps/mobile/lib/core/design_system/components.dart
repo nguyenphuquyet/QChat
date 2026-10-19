@@ -1,4 +1,5 @@
 import 'package:tdesign_flutter/tdesign_flutter.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import '../localization/strings.dart';
 import 'qchat_colors.dart';
 import 'qchat_icons.dart';
@@ -23,13 +24,15 @@ class QChatPage extends StatelessWidget {
     this.leading,
     this.trailing,
     this.bottom,
+    this.background,
   });
   final Widget child;
   final String? title;
   final Widget? leading, trailing, bottom;
+  final Color? background;
   @override
   Widget build(BuildContext c) => ColoredBox(
-    color: Theme.of(c).scaffoldBackgroundColor,
+    color: background ?? Theme.of(c).scaffoldBackgroundColor,
     child: SafeArea(
       child: Column(
         children: [
@@ -53,13 +56,8 @@ class QChatAppBar extends StatelessWidget {
   final String title;
   final Widget? leading, trailing;
   @override
-  Widget build(BuildContext c) => Container(
-    height: 56,
-    decoration: BoxDecoration(
-      border: Border(
-        bottom: BorderSide(color: ink(c).withValues(alpha: .07), width: .5),
-      ),
-    ),
+  Widget build(BuildContext c) => SizedBox(
+    height: 54,
     child: Row(
       children: [
         SizedBox(width: 64, child: leading),
@@ -85,10 +83,12 @@ class QChatIconButton extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.color,
+    this.size = 24,
   });
   final String icon, label;
   final VoidCallback onTap;
   final Color? color;
+  final double size;
   @override
   Widget build(BuildContext c) => Semantics(
     button: true,
@@ -99,7 +99,9 @@ class QChatIconButton extends StatelessWidget {
       child: SizedBox(
         width: 48,
         height: 48,
-        child: Center(child: QChatIcon(icon, color: color ?? ink(c))),
+        child: Center(
+          child: QChatIcon(icon, color: color ?? ink(c), size: size),
+        ),
       ),
     ),
   );
@@ -163,12 +165,33 @@ class QChatSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext c) => Padding(
     padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
-    child: TInput(
-      controller: controller,
-      hintText: tr(c, 'search'),
-      prefix: const QChatIcon('search', size: 18, color: QChatColors.muted),
-      onChanged: onChanged,
-      borderless: true,
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        TInput(
+          controller: controller,
+          hintText: '',
+          onChanged: onChanged,
+          borderless: true,
+        ),
+        if (controller.text.isEmpty)
+          IgnorePointer(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const QChatIcon('search', size: 20, color: Color(0xffb2b2b2)),
+                const SizedBox(width: 6),
+                Text(
+                  tr(c, 'search'),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    color: Color(0xffb2b2b2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     ),
   );
 }
@@ -232,11 +255,13 @@ class QChatListTile extends StatelessWidget {
     this.leading,
     this.trailing,
     this.onTap,
+    this.titleLines = 1,
   });
   final String title;
   final String? subtitle;
   final Widget? leading, trailing;
   final VoidCallback? onTap;
+  final int titleLines;
   @override
   Widget build(BuildContext c) => Semantics(
     button: onTap != null,
@@ -248,10 +273,10 @@ class QChatListTile extends StatelessWidget {
         padding: const EdgeInsets.only(left: 16),
         child: Row(
           children: [
-            if (leading != null) ...[leading!, const SizedBox(width: 12)],
+            if (leading != null) ...[leading!, const SizedBox(width: 18)],
             Expanded(
               child: Container(
-                padding: const EdgeInsets.fromLTRB(0, 15, 16, 15),
+                padding: const EdgeInsets.fromLTRB(0, 17, 16, 17),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
@@ -268,8 +293,8 @@ class QChatListTile extends StatelessWidget {
                         children: [
                           Text(
                             title,
-                            style: const TextStyle(fontSize: 16),
-                            maxLines: 1,
+                            style: const TextStyle(fontSize: 17),
+                            maxLines: titleLines,
                             overflow: TextOverflow.ellipsis,
                           ),
                           if (subtitle != null) ...[
@@ -287,7 +312,14 @@ class QChatListTile extends StatelessWidget {
                         ],
                       ),
                     ),
-                    ?trailing,
+                    if (trailing != null)
+                      trailing!
+                    else if (onTap != null)
+                      const QChatIcon(
+                        'chevron',
+                        size: 18,
+                        color: Color(0xffb8b8b8),
+                      ),
                   ],
                 ),
               ),
@@ -306,16 +338,31 @@ class QChatConversationTile extends StatelessWidget {
     required this.preview,
     required this.onTap,
     this.unread = 0,
+    this.time = '',
   });
   final String name, preview;
+  final String time;
   final int unread;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext c) => QChatListTile(
     title: name,
     subtitle: preview,
-    leading: QChatAvatar(name),
-    trailing: QChatUnreadBadge(unread),
+    leading: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        QChatAvatar(name),
+        if (unread > 0)
+          Positioned(right: -5, top: -5, child: QChatUnreadBadge(unread)),
+      ],
+    ),
+    trailing: Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Text(
+        time,
+        style: const TextStyle(fontSize: 11, color: Color(0xffb2b2b2)),
+      ),
+    ),
     onTap: onTap,
   );
 }
@@ -331,7 +378,9 @@ class QChatBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext c) => Container(
     decoration: BoxDecoration(
-      color: surface(c),
+      color: Theme.of(c).brightness == Brightness.dark
+          ? surface(c)
+          : const Color(0xfff7f7f7),
       border: Border(
         top: BorderSide(color: ink(c).withValues(alpha: .12), width: .5),
       ),
@@ -352,15 +401,28 @@ class QChatBottomNavigation extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      QChatIcon(
-                        ['chats', 'contacts', 'discover', 'me'][i],
+                      Icon(
+                        (index == i
+                            ? const [
+                                CupertinoIcons.chat_bubble_fill,
+                                CupertinoIcons.person_2_fill,
+                                CupertinoIcons.compass_fill,
+                                CupertinoIcons.person_fill,
+                              ]
+                            : const [
+                                CupertinoIcons.chat_bubble,
+                                CupertinoIcons.person_2,
+                                CupertinoIcons.compass,
+                                CupertinoIcons.person,
+                              ])[i],
+                        size: 26,
                         color: index == i ? QChatColors.green : ink(c),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         tr(c, ['chats', 'contacts', 'discover', 'me'][i]),
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 11.5,
                           color: index == i ? QChatColors.green : ink(c),
                         ),
                       ),
@@ -423,28 +485,47 @@ class QChatChatBubble extends StatelessWidget {
   final VoidCallback? onLongPress;
   @override
   Widget build(BuildContext c) {
-    final avatar = QChatAvatar(name, size: 38);
+    final avatar = QChatAvatar(name, size: 42);
     final bubble = Flexible(
       child: GestureDetector(
         onLongPress: onLongPress,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(c).width * .68,
-          ),
-          decoration: BoxDecoration(
-            color: mine ? QChatColors.bubble : surface(c),
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: DefaultTextStyle(
-            style: TextStyle(
-              color: mine ? QChatColors.ink : ink(c),
-              fontSize: 16,
-              height: 1.4,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(c).width * .68,
+              ),
+              decoration: BoxDecoration(
+                color: mine ? QChatColors.bubble : surface(c),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: DefaultTextStyle(
+                style: TextStyle(
+                  color: mine ? QChatColors.ink : ink(c),
+                  fontSize: 16,
+                  fontFamily: 'Arial',
+                  height: 1.4,
+                ),
+                child: child,
+              ),
             ),
-            child: child,
-          ),
+            Positioned(
+              top: 14,
+              right: mine ? 6 : null,
+              left: mine ? null : 6,
+              child: Transform.rotate(
+                angle: .785398,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  color: mine ? QChatColors.bubble : surface(c),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
