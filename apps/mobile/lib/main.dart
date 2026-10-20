@@ -21,6 +21,7 @@ import 'features/moments/moments_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/calls/call_screen.dart';
+import 'features/search/search_screen.dart';
 
 GoRoute qchatRoute({
   required String path,
@@ -55,6 +56,7 @@ class _QChatAppState extends ConsumerState<QChatApp> {
       routes: [
         qchatRoute(path: '/login', builder: (_, s) => const AuthScreen()),
         qchatRoute(path: '/home', builder: (_, s) => const HomeScreen()),
+        qchatRoute(path: '/search', builder: (_, s) => const SearchScreen()),
         qchatRoute(
           path: '/chat/:id',
           builder: (_, s) => ChatScreen(id: s.pathParameters['id']!),

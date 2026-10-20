@@ -11,6 +11,7 @@ import { messagesRoute } from "../modules/messages";
 import { momentsRoute } from "../modules/moments";
 import { mediaRoute } from "../modules/media";
 import { usersRoute } from "../modules/users";
+import { searchRoute } from "../modules/search";
 import { uuid } from "../../../../packages/contracts";
 export async function handle(request: Request) {
   try {
@@ -60,6 +61,9 @@ export async function handle(request: Request) {
     await rateLimit(`user:${userId}`, 180);
     let result: unknown;
     switch (path[0]) {
+      case "search":
+        if (method === "GET") result = await searchRoute(userId, url);
+        break;
       case "users":
         result = await usersRoute(userId, method, path, body, url);
         break;

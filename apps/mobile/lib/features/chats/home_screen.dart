@@ -316,7 +316,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         'search',
         icon: 'searchStar',
         color: const Color(0xffef6269),
-        onTap: () => c.push('/friends'),
+        onTap: () => c.push('/search'),
       ),
       sectionGap,
       const MenuRow('nearby', icon: 'nearby'),

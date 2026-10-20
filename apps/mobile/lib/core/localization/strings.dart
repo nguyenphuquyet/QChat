@@ -1,6 +1,12 @@
 import 'package:flutter/widgets.dart';
 
 const translations = <String, List<String>>{
+  'searchHint': [
+    'Search contacts, chats and messages',
+    'Tìm trong danh bạ, cuộc trò chuyện và tin nhắn',
+    '搜索联系人、聊天和消息',
+  ],
+  'messages': ['Messages', 'Tin nhắn', '消息'],
   'offlineCache': [
     'Connection lost. Showing saved content.',
     'Lỗi kết nối. Đang hiển thị nội dung đã lưu.',
