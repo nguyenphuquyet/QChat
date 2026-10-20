@@ -77,6 +77,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext c) => QChatPage(
     statusBackground: index == 3 ? surface(c) : null,
     navigationBackground: navigationSurface(c),
+    edgeToEdge: true,
     title: index == 3
         ? null
         : index == 0
@@ -326,10 +327,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ],
   );
   Widget me(BuildContext c, Map u) => ListView(
+    padding: EdgeInsets.zero,
     children: [
       Container(
         color: surface(c),
-        padding: const EdgeInsets.fromLTRB(28, 60, 20, 32),
+        padding: EdgeInsets.fromLTRB(
+          28,
+          60 + MediaQuery.paddingOf(c).top,
+          20,
+          32,
+        ),
         child: GestureDetector(
           onTap: () async {
             await c.push('/profile');

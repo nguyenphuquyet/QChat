@@ -26,6 +26,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       : const SizedBox.shrink();
   @override
   Widget build(BuildContext c) => QChatPage(
+    edgeToEdge: true,
     title: tr(c, 'settings'),
     leading: QChatIconButton(
       'back',

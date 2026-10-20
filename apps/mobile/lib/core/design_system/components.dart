@@ -33,11 +33,13 @@ class QChatPage extends StatelessWidget {
     this.background,
     this.statusBackground,
     this.navigationBackground,
+    this.edgeToEdge = false,
   });
   final Widget child;
   final String? title;
   final Widget? leading, trailing, bottom;
   final Color? background, statusBackground, navigationBackground;
+  final bool edgeToEdge;
   @override
   Widget build(BuildContext c) {
     final pageColor = background ?? Theme.of(c).scaffoldBackgroundColor;
@@ -45,7 +47,7 @@ class QChatPage extends StatelessWidget {
     final bottomColor = navigationBackground ?? pageColor;
     final topBrightness = ThemeData.estimateBrightnessForColor(topColor);
     final bottomBrightness = ThemeData.estimateBrightnessForColor(bottomColor);
-    final padding = MediaQuery.paddingOf(c);
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -63,40 +65,37 @@ class QChatPage extends StatelessWidget {
       ),
       child: ColoredBox(
         color: pageColor,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Paint the system insets with this screen's surfaces. SafeArea
-            // still keeps controls clear of the notch and gesture region.
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: padding.top,
-              child: ColoredBox(color: topColor),
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: padding.bottom,
-              child: ColoredBox(color: bottomColor),
-            ),
-            SafeArea(
-              child: Column(
-                children: [
-                  if (title != null)
-                    QChatAppBar(
-                      title: title!,
-                      leading: leading,
-                      trailing: trailing,
-                    ),
-                  Expanded(child: child),
-                  ?bottom,
-                ],
+        child: SafeArea(
+          top: !edgeToEdge,
+          bottom: !edgeToEdge,
+          child: Column(
+            children: [
+              if (title != null)
+                SafeArea(
+                  bottom: false,
+                  child: QChatAppBar(
+                    title: title!,
+                    leading: leading,
+                    trailing: trailing,
+                  ),
+                ),
+              Expanded(
+                child: MediaQuery.removePadding(
+                  context: c,
+                  removeTop: !edgeToEdge || title != null,
+                  removeBottom: !edgeToEdge || bottom != null,
+                  removeLeft: true,
+                  removeRight: true,
+                  child: child,
+                ),
               ),
-            ),
-          ],
+              if (bottom != null)
+                ColoredBox(
+                  color: navigationBackground ?? pageColor,
+                  child: SafeArea(top: false, child: bottom!),
+                ),
+            ],
+          ),
         ),
       ),
     );
