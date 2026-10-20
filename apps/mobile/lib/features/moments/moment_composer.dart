@@ -109,13 +109,15 @@ class _MomentComposerState extends ConsumerState<MomentComposer> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
+          TInput(
             controller: text,
-            maxLength: 5000,
+            hintText: tr(c, 'writeMoment'),
             maxLines: 5,
-            enabled: !busy,
-            decoration: InputDecoration(hintText: tr(c, 'writeMoment')),
+            minLines: 3,
+            cursorColor: QChatColors.green,
+            style: TextStyle(color: ink(c), fontSize: 16),
           ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             children: [
@@ -151,10 +153,12 @@ class _MomentComposerState extends ConsumerState<MomentComposer> {
                 },
               ),
             ),
-          SwitchListTile(
-            title: Text(tr(c, 'private')),
-            value: private,
-            onChanged: busy ? null : (v) => setState(() => private = v),
+          QChatListTile(
+            title: tr(c, 'private'),
+            trailing: TSwitch(
+              value: private,
+              onChanged: busy ? null : (v) => setState(() => private = v),
+            ),
           ),
           if (error != null)
             Text(error!, style: const TextStyle(color: QChatColors.danger)),

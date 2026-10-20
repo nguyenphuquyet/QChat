@@ -40,19 +40,23 @@ class _MediaImageState extends ConsumerState<MediaImage> {
             fit: widget.fit,
             errorBuilder: (_, e, st) => GestureDetector(
               onTap: () => setState(load),
-              child: const Center(child: Icon(Icons.refresh)),
+              child: const Center(
+                child: Icon(TIcons.refresh, size: 22, color: QChatColors.muted),
+              ),
             ),
           )
         : s.hasError
         ? GestureDetector(
             onTap: () => setState(load),
-            child: const Center(child: Icon(Icons.refresh)),
+            child: const Center(
+              child: Icon(TIcons.refresh, size: 22, color: QChatColors.muted),
+            ),
           )
         : const Center(
             child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              width: 22,
+              height: 22,
+              child: TLoading(size: 20),
             ),
           ),
   );

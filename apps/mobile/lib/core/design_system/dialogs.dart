@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:tdesign_flutter/tdesign_flutter.dart';
 import '../localization/strings.dart';
+import 'components.dart';
 
 Future<String?> editText(
   BuildContext context,
@@ -8,83 +9,68 @@ Future<String?> editText(
   int maxLength = 300,
   bool secret = false,
   int lines = 1,
-}) => showDialog<String>(
-  context: context,
-  builder: (_) => _TextDialog(
-    title: title,
-    initial: initial,
-    maxLength: maxLength,
-    secret: secret,
-    lines: lines,
-  ),
-);
+}) {
+  final controller = TextEditingController(text: initial);
+  return TDialog.show<String>(
+    context,
+    barrierDismissible: true,
+    dialog: StatefulBuilder(
+      builder: (c, _) => TDialog(
+        title: Text(title),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: TInput(
+            controller: controller,
+            hintText: title,
+            obscureText: secret,
+            maxLines: lines,
+            minLines: lines == 1 ? null : 1,
+            autofocus: true,
+            cursorColor: QChatColors.green,
+            style: const TextStyle(fontSize: 16),
+          ),
+        ),
+        actions: [
+          TDialogAction(
+            child: Text(tr(c, 'cancel')),
+            variant: TButtonVariant.text,
+          ),
+          TDialogAction(
+            child: Text(tr(c, 'save')),
+            variant: TButtonVariant.text,
+            role: TDialogActionRole.primary,
+            onPressed: () => Navigator.pop(c, controller.text.trim()),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 Future<bool> confirmAction(
   BuildContext context,
   String title,
   String message,
 ) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
+    await TDialog.show<bool>(
+      context,
+      barrierDismissible: true,
+      dialog: TDialog(
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: Text(tr(c, 'cancel')),
+          TDialogAction(
+            child: Text(tr(context, 'cancel')),
+            variant: TButtonVariant.text,
+            result: false,
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: Text(tr(c, 'confirm')),
+          TDialogAction(
+            child: Text(tr(context, 'confirm')),
+            variant: TButtonVariant.text,
+            role: TDialogActionRole.primary,
+            result: true,
           ),
         ],
       ),
     ) ??
     false;
-
-class _TextDialog extends StatefulWidget {
-  const _TextDialog({
-    required this.title,
-    required this.initial,
-    required this.maxLength,
-    required this.secret,
-    required this.lines,
-  });
-  final String title, initial;
-  final int maxLength, lines;
-  final bool secret;
-  @override
-  State<_TextDialog> createState() => _TextDialogState();
-}
-
-class _TextDialogState extends State<_TextDialog> {
-  late final controller = TextEditingController(text: widget.initial);
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext c) => AlertDialog(
-    title: Text(widget.title),
-    content: TextField(
-      controller: controller,
-      autofocus: true,
-      obscureText: widget.secret,
-      maxLength: widget.maxLength,
-      maxLines: widget.lines,
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(c),
-        child: Text(tr(c, 'cancel')),
-      ),
-      TextButton(
-        onPressed: () => Navigator.pop(c, controller.text.trim()),
-        child: Text(tr(c, 'save')),
-      ),
-    ],
-  );
-}
