@@ -228,6 +228,9 @@ class _ScanScreenState extends State<ScanScreen> {
   bool scanned = false;
   @override
   Widget build(BuildContext c) => QChatPage(
+    // Let the camera preview reach behind the system home/navigation bar.
+    edgeToEdge: true,
+    navigationBackground: Colors.black,
     title: tr(c, 'scan'),
     leading: QChatIconButton(
       'back',
